@@ -1,3 +1,4 @@
+
 export enum HMRCCategory {
   RENTAL_INC_001 = 'RENTAL_INC_001',
   REPAIRS_101 = 'REPAIRS_101',
@@ -10,6 +11,7 @@ export enum HMRCCategory {
   MORT_INT_701 = 'MORT_INT_701',
   TRAVEL_801 = 'TRAVEL_801',
   MISC_901 = 'MISC_901',
+  PERSONAL_000 = 'PERSONAL_000',
   UNCATEGORIZED = 'UNCATEGORIZED'
 }
 
@@ -25,6 +27,7 @@ export const CategoryLabels: Record<HMRCCategory, string> = {
   [HMRCCategory.MORT_INT_701]: 'Mortgage Interest (Sec 24)',
   [HMRCCategory.TRAVEL_801]: 'Travel & Vehicle',
   [HMRCCategory.MISC_901]: 'Misc / Office',
+  [HMRCCategory.PERSONAL_000]: 'Personal Expense',
   [HMRCCategory.UNCATEGORIZED]: 'Uncategorized',
 };
 
@@ -32,13 +35,13 @@ export interface Transaction {
   id: string;
   date: string;
   description: string;
-  amount: number;
+  amount: number; // Negative for expense, Positive for income
   propertyId: string;
   category: HMRCCategory;
   status: 'reconciled' | 'pending' | 'flagged';
   source: 'bank_upload' | 'manual';
   matchedInvoiceId?: string;
-  tag?: 'D' | 'J';
+  tag?: 'D' | 'J'; // Added for spouse tagging
 }
 
 export interface Invoice {
@@ -77,8 +80,8 @@ export interface TaxEstimate {
   }
 }
 
-export type TaxYear = '2023-2024' | '2024-2025' | '2025-2026' | '2026-2027';
-export const TAX_YEARS: TaxYear[] = ['2023-2024', '2024-2025', '2025-2026', '2026-2027'];
+export type TaxYear = '2024-2025' | '2025-2026';
+export const TAX_YEARS: TaxYear[] = ['2024-2025', '2025-2026'];
 
 export const getTaxYearDates = (year: TaxYear) => {
   const startYear = parseInt(year.split('-')[0]);
