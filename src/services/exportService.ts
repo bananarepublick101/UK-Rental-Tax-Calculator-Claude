@@ -12,6 +12,7 @@ const XeroAccountCodes: Record<HMRCCategory, string> = {
   [HMRCCategory.MORT_INT_701]: '440',   
   [HMRCCategory.TRAVEL_801]: '465',     
   [HMRCCategory.MISC_901]: '429',       
+  [HMRCCategory.PERSONAL_000]: '000',   // Personal - not deductible
   [HMRCCategory.UNCATEGORIZED]: '429',  
 };
 
@@ -31,6 +32,9 @@ export const exportXeroJournals = (transactions: Transaction[], properties: Prop
   const { label } = getTaxYearDates(taxYear);
   const yearLabel = label.replace('/', '-');
   
+  // Filter out personal expenses from Xero export
+  const deductibleTransactions = transactions.filter(t => t.category !== HMRCCategory.PERSONAL_000);
+  
   const headers = [
     'Date',
     'Narration',
@@ -45,7 +49,7 @@ export const exportXeroJournals = (transactions: Transaction[], properties: Prop
 
   const groupedData: Record<string, { amount: number, propertyId: string, category: HMRCCategory }> = {};
 
-  transactions.forEach(t => {
+  deductibleTransactions.forEach(t => {
     const key = `${t.propertyId}-${t.category}`;
     if (!groupedData[key]) {
       groupedData[key] = { amount: 0, propertyId: t.propertyId, category: t.category };
@@ -88,6 +92,9 @@ export const exportMTDBridging = (transactions: Transaction[], properties: Prope
   const { start, end, label } = getTaxYearDates(taxYear);
   const yearLabel = label.replace('/', '-');
 
+  // Filter out personal expenses from MTD export
+  const deductibleTransactions = transactions.filter(t => t.category !== HMRCCategory.PERSONAL_000);
+
   const headers = [
     'Category Code',
     'Category Name',
@@ -103,7 +110,7 @@ export const exportMTDBridging = (transactions: Transaction[], properties: Prope
     groupedData[cat] = { amount: 0, count: 0 };
   });
 
-  transactions.forEach(t => {
+  deductibleTransactions.forEach(t => {
     if (groupedData[t.category]) {
       groupedData[t.category].amount += t.amount;
       groupedData[t.category].count += 1;
@@ -111,7 +118,7 @@ export const exportMTDBridging = (transactions: Transaction[], properties: Prope
   });
 
   const rows = Object.entries(groupedData)
-    .filter(([_, data]) => data.count > 0)
+    .filter(([cat, data]) => data.count > 0 && cat !== HMRCCategory.PERSONAL_000)
     .map(([cat, data]) => {
       return [
         cat,
