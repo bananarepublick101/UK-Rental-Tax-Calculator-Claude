@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Invoice, Transaction, TaxYear, isDateInTaxYear, getTaxYearDates } from '../types';
+import { Invoice, Transaction, TaxYear, isDateInTaxYear, getTaxYearDates, HMRCCategory } from '../types';
 import { parseInvoiceImage } from '../services/geminiService';
 import { UploadCloud, FileText, Loader2, Check, AlertCircle, Link as LinkIcon, CheckCircle2, X, Trash2 } from 'lucide-react';
 
@@ -45,10 +45,15 @@ export const InvoiceManager: React.FC<InvoiceManagerProps> = ({
       }
   }, [toast]);
 
-  // Filter transactions: Only Expenses, in current Tax Year
+  // Filter transactions: Only Expenses, in current Tax Year, EXCLUDE Personal and Uncategorized
   const expenseTransactions = useMemo(() => {
     return transactions
-        .filter(t => isDateInTaxYear(t.date, taxYear) && t.amount < 0)
+        .filter(t => 
+            isDateInTaxYear(t.date, taxYear) && 
+            t.amount < 0 &&
+            t.category !== HMRCCategory.PERSONAL_000 &&
+            t.category !== HMRCCategory.UNCATEGORIZED
+        )
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions, taxYear]);
 
@@ -177,6 +182,7 @@ export const InvoiceManager: React.FC<InvoiceManagerProps> = ({
           <div>
             <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Receipt Hub</h2>
             <p className="text-sm text-zinc-500">Reconcile expenses for <span className="font-semibold text-indigo-600">{taxYearInfo.label}</span></p>
+            <p className="text-xs text-zinc-400 mt-1">Showing deductible expenses only (excludes Personal & Uncategorized)</p>
           </div>
           <div className="text-right">
              <div className="text-3xl font-bold text-zinc-900 tracking-tight">{matchedExpenses} <span className="text-lg text-zinc-400 font-normal">/ {totalExpenses}</span></div>
@@ -269,12 +275,14 @@ export const InvoiceManager: React.FC<InvoiceManagerProps> = ({
           <div className="lg:col-span-2 space-y-4">
              <div className="flex justify-between items-center pb-2 border-b border-zinc-200">
                 <h3 className="font-bold text-zinc-900">Expense Checklist</h3>
+                <span className="text-xs text-zinc-400">Tip: Mark personal items as "Personal Expense" in Transactions to hide them here</span>
              </div>
 
              <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
                  {expenseTransactions.length === 0 ? (
                      <div className="p-12 text-center text-zinc-400">
-                         <p>No expenses found for this tax year.</p>
+                         <p>No deductible expenses found for this tax year.</p>
+                         <p className="text-xs mt-2">Personal and Uncategorized expenses are hidden from this view.</p>
                      </div>
                  ) : (
                      <div className="divide-y divide-zinc-50">
