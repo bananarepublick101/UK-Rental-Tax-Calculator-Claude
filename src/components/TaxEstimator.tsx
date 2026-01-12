@@ -24,8 +24,13 @@ export const TaxEstimator: React.FC<TaxEstimatorProps> = ({ transactions, taxYea
         .filter(t => t.category === HMRCCategory.MORT_INT_701)
         .reduce((a, b) => a + Math.abs(b.amount), 0);
 
+    // Exclude PERSONAL_000 and Mortgage Interest from deductible expenses
     const otherExpenses = yearTransactions
-        .filter(t => t.amount < 0 && t.category !== HMRCCategory.MORT_INT_701)
+        .filter(t => 
+            t.amount < 0 && 
+            t.category !== HMRCCategory.MORT_INT_701 &&
+            t.category !== HMRCCategory.PERSONAL_000
+        )
         .reduce((a, b) => a + Math.abs(b.amount), 0);
     
     // Taxable Profit does NOT deduct finance costs (since 2020)
@@ -247,7 +252,7 @@ export const TaxEstimator: React.FC<TaxEstimatorProps> = ({ transactions, taxYea
                     </div>
                 </div>
                 <p className="text-xs text-zinc-500 leading-relaxed border-l-4 border-emerald-400 pl-4 py-1">
-                    This is your actual liquidity after paying all expenses <strong>including</strong> mortgage interest, but <strong>before</strong> tax.
+                    This is your actual liquidity after paying all deductible expenses <strong>including</strong> mortgage interest, but <strong>before</strong> tax. Personal expenses are excluded.
                 </p>
             </div>
 
