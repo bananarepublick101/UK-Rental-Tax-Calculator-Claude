@@ -2,7 +2,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Transaction, HMRCCategory, TaxYear, isDateInTaxYear, getTaxYearDates, Property } from '../types';
-import { Pencil } from 'lucide-react';
 import { ArrowUpRight, ArrowDownRight, TrendingUp, AlertCircle, Plus, Building2, X, Trash2, Home, Wallet, PieChart, Users } from 'lucide-react';
 
 const StatCard = ({ title, value, icon, trend, trendColor, delay }: { title: string, value: number, icon: React.ReactNode, trend: string, trendColor: string, delay: number }) => (
@@ -49,9 +48,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, properties, 
     return transactions.filter(t => isDateInTaxYear(t.date, taxYear));
   }, [transactions, taxYear]);
 
+  // Helper to check if expense is deductible (not personal)
+  const isDeductibleExpense = (t: Transaction) => 
+    t.amount < 0 && t.category !== HMRCCategory.PERSONAL_000;
+
   const stats = useMemo(() => {
     const income = filteredTransactions.filter(t => t.amount > 0).reduce((acc, t) => acc + t.amount, 0);
-    const expenses = filteredTransactions.filter(t => t.amount < 0).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    // Exclude PERSONAL_000 from deductible expenses
+    const expenses = filteredTransactions
+      .filter(isDeductibleExpense)
+      .reduce((acc, t) => acc + Math.abs(t.amount), 0);
     const profit = income - expenses;
     const uncategorizedCount = filteredTransactions.filter(t => t.category === HMRCCategory.UNCATEGORIZED).length;
     
@@ -60,9 +66,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, properties, 
 
   const ownershipSplit = useMemo(() => {
     const dIncome = filteredTransactions.filter(t => t.tag === 'D' && t.amount > 0).reduce((acc, t) => acc + t.amount, 0);
-    const dExpense = filteredTransactions.filter(t => t.tag === 'D' && t.amount < 0).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    // Exclude PERSONAL_000 from expense split calculations
+    const dExpense = filteredTransactions
+      .filter(t => t.tag === 'D' && isDeductibleExpense(t))
+      .reduce((acc, t) => acc + Math.abs(t.amount), 0);
     const jIncome = filteredTransactions.filter(t => t.tag === 'J' && t.amount > 0).reduce((acc, t) => acc + t.amount, 0);
-    const jExpense = filteredTransactions.filter(t => t.tag === 'J' && t.amount < 0).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const jExpense = filteredTransactions
+      .filter(t => t.tag === 'J' && isDeductibleExpense(t))
+      .reduce((acc, t) => acc + Math.abs(t.amount), 0);
     
     const totalRecordedIncome = dIncome + jIncome || 1;
     const totalRecordedExpense = dExpense + jExpense || 1;
@@ -80,7 +91,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, properties, 
       return properties.map(prop => {
           const propTrans = filteredTransactions.filter(t => t.propertyId === prop.id);
           const income = propTrans.filter(t => t.amount > 0).reduce((acc, t) => acc + t.amount, 0);
-          const expenses = propTrans.filter(t => t.amount < 0).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+          // Exclude PERSONAL_000 from property expense calculations
+          const expenses = propTrans
+            .filter(isDeductibleExpense)
+            .reduce((acc, t) => acc + Math.abs(t.amount), 0);
           const profit = income - expenses;
           return { ...prop, income, expenses, profit };
       });
@@ -97,7 +111,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, properties, 
         
         if (taxYearIndex >= 0 && taxYearIndex < 12) {
             if (t.amount > 0) data[taxYearIndex].income += t.amount;
-            else data[taxYearIndex].expense += Math.abs(t.amount);
+            // Exclude PERSONAL_000 from chart expense data
+            else if (t.category !== HMRCCategory.PERSONAL_000) {
+                data[taxYearIndex].expense += Math.abs(t.amount);
+            }
         }
     });
     return data;
@@ -122,110 +139,68 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, properties, 
   };
 
   const handleDeleteProperty = (e: React.MouseEvent, id: string) => {
-      e.preventDefault();
       e.stopPropagation();
-      if(confirm('Remove this property and all its associated data from analysis?')) {
-        setProperties(prev => prev.filter(p => p.id !== id));
+      if (confirm('Are you sure you want to remove this property?')) {
+          setProperties(prev => prev.filter(p => p.id !== id));
       }
   };
 
   return (
-    <div className="space-y-8 animate-fade-in relative pb-10">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Executive Summary</h1>
-            <p className="text-zinc-500 mt-1 flex items-center gap-2 text-sm">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                Tax Year: <span className="font-semibold text-zinc-700">{taxYearInfo.label}</span> 
-                <span className="text-zinc-300 mx-1">|</span>
-                <span className="text-xs uppercase tracking-wider font-bold">{taxYearInfo.start} to {taxYearInfo.end}</span>
-            </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <StatCard 
-            title="Total Income" 
-            value={stats.income} 
-            icon={<Wallet className="w-5 h-5 text-emerald-500" />} 
-            trend="Income"
-            trendColor="text-emerald-700 bg-emerald-50 border border-emerald-100"
-            delay={0}
-        />
-        <StatCard 
-            title="Total Expenses" 
-            value={stats.expenses} 
-            icon={<PieChart className="w-5 h-5 text-rose-500" />} 
-            trend="Expenses"
-            trendColor="text-rose-700 bg-rose-50 border border-rose-100"
-            delay={100}
-        />
-        <StatCard 
-            title="Net Profit" 
-            value={stats.profit} 
-            icon={<TrendingUp className="w-5 h-5 text-indigo-500" />} 
-            trend="Net Profit"
-            trendColor="text-indigo-700 bg-indigo-50 border border-indigo-100"
-            delay={200}
-        />
-        <div className={`p-6 rounded-2xl border transition-all duration-300 shadow-sm animate-fade-in-up ${stats.uncategorizedCount > 0 ? 'bg-amber-50 border-amber-200 shadow-amber-100/50' : 'bg-white border-zinc-100'}`} style={{ animationDelay: '300ms' }}>
-            <div className="flex justify-between items-start h-full flex-col">
-                <div className="flex justify-between w-full items-start">
-                    <div>
-                        <p className={`text-sm font-medium ${stats.uncategorizedCount > 0 ? 'text-amber-700' : 'text-zinc-500'}`}>Action Required</p>
-                        <h3 className={`text-3xl font-bold mt-1 ${stats.uncategorizedCount > 0 ? 'text-amber-800' : 'text-zinc-900'}`}>{stats.uncategorizedCount}</h3>
-                    </div>
-                    <div className={`p-2.5 rounded-xl ${stats.uncategorizedCount > 0 ? 'bg-amber-100 text-amber-600' : 'bg-zinc-100 text-zinc-400'}`}>
-                        <AlertCircle className="w-5 h-5" />
-                    </div>
+    <div className="space-y-8">
+      {/* Stats Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Total Income" value={stats.income} icon={<ArrowUpRight className="w-5 h-5 text-emerald-500" />} trend="Income" trendColor="bg-emerald-100 text-emerald-700" delay={0} />
+        <StatCard title="Deductible Expenses" value={stats.expenses} icon={<ArrowDownRight className="w-5 h-5 text-rose-500" />} trend="Expenses" trendColor="bg-rose-100 text-rose-700" delay={50} />
+        <StatCard title="Net Profit" value={stats.profit} icon={<TrendingUp className="w-5 h-5 text-indigo-500" />} trend="Net Profit" trendColor="bg-indigo-100 text-indigo-700" delay={100} />
+        <div 
+            className="bg-white p-6 rounded-2xl border border-zinc-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden animate-fade-in-up"
+            style={{ animationDelay: '150ms' }}
+        >
+            <div className="flex justify-between items-start">
+                <div>
+                    <p className="text-sm font-medium text-zinc-500 mb-1">Uncategorized</p>
+                    <h3 className="text-3xl font-bold text-zinc-900 tracking-tight">{stats.uncategorizedCount}</h3>
                 </div>
-                <p className={`text-xs mt-auto font-bold uppercase tracking-wider ${stats.uncategorizedCount > 0 ? 'text-amber-700' : 'text-zinc-400'}`}>Uncategorized</p>
+                <div className={`p-3 rounded-xl border ${stats.uncategorizedCount > 0 ? 'bg-amber-50 border-amber-100 text-amber-500' : 'bg-emerald-50 border-emerald-100 text-emerald-500'}`}>
+                    <AlertCircle className="w-5 h-5" />
+                </div>
+            </div>
+            <div className={`mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${stats.uncategorizedCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                {stats.uncategorizedCount > 0 ? 'Needs Review' : 'All Clear'}
             </div>
         </div>
       </div>
 
+      {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-zinc-100 shadow-sm animate-fade-in">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-zinc-900">Financial Performance</h3>
-                <div className="flex items-center gap-2 text-xs font-medium">
-                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        <span className="w-2 h-2 rounded-full bg-indigo-500"></span> Income
-                    </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
-                        <span className="w-2 h-2 rounded-full bg-rose-500"></span> Expenses
-                    </div>
-                </div>
-            </div>
-            <div className="h-80 w-full">
+          {/* Main Chart */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-zinc-100 shadow-sm">
+              <h3 className="text-lg font-bold text-zinc-900 mb-6">Monthly Cash Flow ({taxYearInfo.label})</h3>
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f4f4f5" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#a1a1aa', fontSize: 12, fontWeight: 500 }} dy={10} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#a1a1aa', fontSize: 12 }} tickFormatter={(value) => `£${value/1000}k`} />
-                        <Tooltip cursor={{ fill: '#f4f4f5', opacity: 0.5 }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', padding: '12px' }} />
-                        <Bar dataKey="income" name="Income" radius={[4, 4, 0, 0]}>
-                            {chartData.map((_, index) => <Cell key={`cell-inc-${index}`} fill="url(#colorIncome)" />)}
-                        </Bar>
-                        <Bar dataKey="expense" name="Expense" radius={[4, 4, 0, 0]}>
-                            {chartData.map((_, index) => <Cell key={`cell-exp-${index}`} fill="url(#colorExpense)" />)}
-                        </Bar>
-                        <defs>
-                            <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#6366f1" stopOpacity={0.8}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0.6}/>
-                            </linearGradient>
-                            <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.8}/><stop offset="95%" stopColor="#f43f5e" stopOpacity={0.6}/>
-                            </linearGradient>
-                        </defs>
-                    </BarChart>
+                  <BarChart data={chartData} barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#a1a1aa' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#a1a1aa' }} tickFormatter={(v) => `£${(v/1000).toFixed(0)}k`} />
+                    <Tooltip 
+                        formatter={(value: number) => [`£${value.toLocaleString()}`, '']}
+                        contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px', padding: '12px 16px' }}
+                        labelStyle={{ color: '#a1a1aa', marginBottom: '8px', fontWeight: 'bold' }}
+                        cursor={{ fill: 'rgba(0,0,0,0.03)' }}
+                    />
+                    <Bar dataKey="income" name="Income" fill="#10b981" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="expense" name="Deductible Expense" fill="#f43f5e" radius={[6, 6, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
-            </div>
+              </div>
           </div>
 
+          {/* Partner Split Panel */}
           <div className="bg-white p-6 rounded-2xl border border-zinc-100 shadow-sm flex flex-col">
-              <div className="flex items-center gap-2 mb-6 text-zinc-900">
-                  <Users className="w-5 h-5 text-indigo-500" />
+              <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-xl text-white shadow-lg shadow-indigo-500/20">
+                    <Users className="w-5 h-5" />
+                  </div>
                   <h3 className="text-lg font-bold">Partner Split</h3>
               </div>
               
