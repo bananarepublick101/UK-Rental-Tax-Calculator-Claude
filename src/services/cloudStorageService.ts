@@ -1,4 +1,4 @@
-import { Transaction, Invoice, Property } from '../types';
+import { Transaction, Invoice, Property, HMRCCategory } from '../types';
 
 export interface CloudData {
   transactions: Transaction[];
@@ -28,6 +28,32 @@ const normalizeDate = (dateStr: string | null | undefined): string => {
   } catch {
     return dateStr;
   }
+};
+
+/**
+ * Generate invoice records from expense transactions
+ * Mirrors what Receipt Hub displays (excludes Personal and Uncategorized)
+ */
+const generateInvoicesFromTransactions = (transactions: Transaction[]): Invoice[] => {
+  return transactions
+    .filter(t => {
+      // Only expenses (negative amounts)
+      if (t.amount >= 0) return false;
+      // Exclude Personal Expense
+      if (t.category === HMRCCategory.PERSONAL_000) return false;
+      // Exclude Uncategorized
+      if (t.category === HMRCCategory.UNCATEGORIZED) return false;
+      return true;
+    })
+    .map(t => ({
+      id: `inv-${t.id}`,
+      date: t.date,
+      vendor: t.description,
+      amount: Math.abs(t.amount), // Store as positive for clarity
+      description: t.category || '',
+      status: t.status || 'pending',
+      matchedTransactionId: t.id
+    }));
 };
 
 /**
@@ -80,14 +106,26 @@ export const loadFromCloud = async (url: string): Promise<CloudData | null> => {
  * Save data TO Google Sheets (POST request)
  * Uses no-cors mode because GAS redirects POST requests
  * We assume success if no network error occurs
+ * 
+ * IMPORTANT: Invoices are auto-generated from expense transactions
+ * to mirror what's shown in Receipt Hub
  */
 export const syncToCloud = async (url: string, data: CloudData): Promise<{ success: boolean; timestamp?: string }> => {
   try {
     console.log('[Cloud] Syncing to:', url);
+    
+    // Auto-generate invoices from expense transactions (mirrors Receipt Hub)
+    const generatedInvoices = generateInvoicesFromTransactions(data.transactions);
+    
+    const syncData = {
+      ...data,
+      invoices: generatedInvoices
+    };
+    
     console.log('[Cloud] Data:', { 
-      transactions: data.transactions.length, 
-      invoices: data.invoices.length, 
-      properties: data.properties.length 
+      transactions: syncData.transactions.length, 
+      invoices: syncData.invoices.length, 
+      properties: syncData.properties.length 
     });
     
     // Use no-cors to bypass CORS preflight issues with GAS redirects
@@ -97,7 +135,7 @@ export const syncToCloud = async (url: string, data: CloudData): Promise<{ succe
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify(syncData)
     });
     
     // In no-cors mode, we can't read the response
