@@ -1,4 +1,4 @@
-import { Transaction, Invoice, Property, HMRCCategory } from '../types';
+import { Transaction, Invoice, Property } from '../types';
 
 export interface CloudData {
   transactions: Transaction[];
@@ -35,14 +35,16 @@ const normalizeDate = (dateStr: string | null | undefined): string => {
  * Mirrors what Receipt Hub displays (excludes Personal and Uncategorized)
  */
 const generateInvoicesFromTransactions = (transactions: Transaction[]): Invoice[] => {
-  return transactions
+  console.log('[Cloud] Generating invoices from', transactions.length, 'transactions');
+  
+  const invoices = transactions
     .filter(t => {
       // Only expenses (negative amounts)
       if (t.amount >= 0) return false;
-      // Exclude Personal Expense
-      if (t.category === HMRCCategory.PERSONAL_000) return false;
+      // Exclude Personal Expense (using string comparison for robustness)
+      if (t.category === 'PERSONAL_000') return false;
       // Exclude Uncategorized
-      if (t.category === HMRCCategory.UNCATEGORIZED) return false;
+      if (t.category === 'UNCATEGORIZED') return false;
       return true;
     })
     .map(t => ({
@@ -54,6 +56,9 @@ const generateInvoicesFromTransactions = (transactions: Transaction[]): Invoice[
       status: t.status || 'pending',
       matchedTransactionId: t.id
     }));
+  
+  console.log('[Cloud] Generated', invoices.length, 'invoices');
+  return invoices;
 };
 
 /**
